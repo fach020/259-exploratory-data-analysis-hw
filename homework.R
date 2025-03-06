@@ -38,32 +38,47 @@ cities <- c("Charlotte", "Los Angeles", "Houston", "Indianapolis", "Jacksonville
 #> Call the function "read_weather" 
 #> Check by reading/glimpsing a single station's file
 
+read_weather <- function(station) {
+  file_path <- file.path("us-weather-history", paste0(station, ".csv"))
+  weather_data <- read_csv(file_path) %>%
+    mutate(date = as.Date(date, format = "%Y-%m-%d"), station = station)
+  return(weather_data)
+}
 
+read_weather("KSEA")
 
 # QUESTION 2
 #> Use map() and your new function to read in all 10 stations
 #> Note that because map_dfr() has been superseded, and map() does not automatically bind rows, you will need to do so in the code.
 #> Save the resulting dataset to "ds"
 
-
+ds <- map(stations, read_weather) %>% bind_rows()
 
 # QUESTION 3
 #> Make a factor called "city" based on the station variable
 #> (station should be the level and city should be the label)
 #> Use fct_count to check that there are 365 days of data for each city 
 
+ds <- ds %>% mutate(city = factor(station, levels = stations, labels = cities))
+fct_count(ds$city)
 
 # QUESTION 4
 #> Since we're scientists, let's convert all the temperatures to C
 #> Write a function to convert F to C, and then use mutate across to 
 #> convert all of the temperatures, rounded to a tenth of a degree
 
-
+temperature_convert <- function(fahrenheit) {
+  celcius <- (fahrenheit - 32) * 5 / 9
+  return(celcius)
+}
+ds <- ds %>% mutate(across(ends_with("_temp"), ~ round(temperature_convert(.), 1)))
 
 ### CHECK YOUR WORK
 #> At this point, your data should look like the "compiled_data.csv" file
 #> in data-clean. If it isn't, read in that file to use for the remaining
 #> questions so that you have the right data to work with.
+
+glimpse(ds)
 
 # QUESTION 5
 #> Write a function that counts the number of extreme temperature days,
@@ -74,13 +89,22 @@ cities <- c("Charlotte", "Los Angeles", "Houston", "Indianapolis", "Jacksonville
 #> (Seattle, 20, Charlotte 12, Phoenix 12, etc...)
 #> Don't save this summary over the original dataset!
 
+extreme_temperature <- function(ds) {
+  ds %>%
+    filter(actual_min_temp == record_min_temp | actual_max_temp == record_max_temp) %>%
+    count(city, name = "extreme_temp_days") %>%
+    arrange(desc(extreme_temp_days))
+}
 
+extreme_temperature(ds)
 
 # QUESTION 6
 #> Pull out the month from the date and make "month" a factor
 #> Split the tibble by month into a list of tibbles 
 
-
+ds <- ds %>%
+  mutate(month = factor(month(date), levels = 1:12, labels = month.name)) %>%
+  split(.$month)
 
 # QUESTION 7
 #> For each month, determine the correlation between the actual_precipitation
@@ -88,7 +112,15 @@ cities <- c("Charlotte", "Los Angeles", "Houston", "Indianapolis", "Jacksonville
 #> Use a for loop, and print the month along with the resulting correlation
 #> Look at the documentation for the ?cor function if you've never used it before
 
+for (month_name in names(ds)) {
+  month_ds <- ds[[month_name]]
 
+  cat("\nMonth:", month_name)
+
+  cat("\n  Correlation (Actual vs. Avg Precipitation):", round(cor(month_ds$actual_precipitation, month_ds$average_precipitation, use = "complete.obs"), 2),
+      "\n  Correlation (Actual vs. Avg Min Temp):", round(cor(month_ds$actual_min_temp, month_ds$average_min_temp, use = "complete.obs"), 2),
+      "\n  Correlation (Actual vs. Avg Max Temp):", round(cor(month_ds$actual_max_temp, month_ds$average_max_temp, use = "complete.obs"), 2), "\n")
+}
 
 
 # QUESTION 8
@@ -97,7 +129,9 @@ cities <- c("Charlotte", "Los Angeles", "Houston", "Indianapolis", "Jacksonville
 #> Finally, use plot_correlation to investigate correlations between the continuous variables only
 #> Check the documentation for plot_correlation for an easy way to do this
 
-
+plot_boxplot(ds, "city")
+plot_boxplot(ds, "month")
+plot_correlation(ds, type = "continuous")
 
 
 # QUESTION 9
